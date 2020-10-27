@@ -8,11 +8,11 @@ __global__ void matrixMultiplication(const int *a, const int *b, int *c, int mat
   int col = blockIdx.x * blockDim.x + threadIdx.x;
 
   // Iterate over row, and down column
-  c[row * N + col] = 0;
-  for (int k = 0; k < N; k++) {
+  c[row * matrixDim + col] = 0;
+  for (int k = 0; k < matrixDim; k++) {
     // Accumulate results for a single element
-    c[row * N + col] += a[row * N + k] * b[k * N + col];
-  }
+    	c[row * matrixDim + col] += a[row * matrixDim + k] * b[k * matrixDim + col];
+  }	
 }
 
 void launchKernel(const int THREADS, const int BLOCKS, const int *a, const int *b, int *c, int matrixDim)
@@ -24,5 +24,5 @@ void launchKernel(const int THREADS, const int BLOCKS, const int *a, const int *
 	dim3 blocks(BLOCKS, BLOCKS);
 	
 	//Launch Kernel
-	matrixMultiplication<<<blocks, threads>>>(a, b, c, N);
+	matrixMultiplication<<<blocks, threads>>>(a, b, c, matrixDim);
 }
