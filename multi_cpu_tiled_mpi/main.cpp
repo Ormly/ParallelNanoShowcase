@@ -2,7 +2,7 @@
 #include <iostream>
 #include <mpi.h>
 
-#define PROBLEM_SIZE 8
+#define PROBLEM_SIZE 1024
 
 /// Fill mat random integers
 /// \param mat
@@ -17,10 +17,12 @@ void fill_random(int* mat, const size_t rows, const size_t cols){
 }
 
 /// Multiplies matrices a and b and writes the results to mat c
-/// \param a
-/// \param b
-/// \param result
-/// \param dims
+/// \param a - left matrix (mxm)
+/// \param b - right matrix (mxp)
+/// \param c - result matrix (nxp)
+/// \param n - rows in left matrix
+/// \param m - columns in left matrix, rows in right right matrix
+/// \param p - columns in right matrix
 void mat_mul_generic(
         const int* a,
         const int* b,
@@ -33,7 +35,7 @@ void mat_mul_generic(
         for (int j = 0; j < p; ++j) {
             int sum = 0;
             for (int k = 0; k < m; ++k){
-                sum += a[i*p + k] * b[k*i+j];
+                sum += a[i*p + k] * b[k*m+j];
             }
             c[i*p +j] = sum;
         }
@@ -69,14 +71,7 @@ void print_mat(int* mat, const size_t rows, const size_t cols, const char* name)
     }
 }
 
-void print_vector(const int* mat, const size_t length){
-    for(int i=0; i<length; ++i)
-        std::cout << mat[i] << " ";
-    std::cout << std::endl;
-}
-
 int main() {
-
     // seed RNG for kinda random stuff
     srand (static_cast <unsigned> (time(nullptr)));
 
@@ -91,7 +86,6 @@ int main() {
     // Get the number of processes
     int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-    std::cout << "world size: " << world_size << std::endl;
 
     // Get the rank of the process
     int rank;
@@ -106,10 +100,13 @@ int main() {
     //  initialize matrices A, B and C and fill A and B with random data
     // only performed by root node
     if(rank == ROOT_NODE){
+        std::cout << "problem size: " << PROBLEM_SIZE << "X" << PROBLEM_SIZE << std::endl;
+        std::cout << "World size: " << world_size << std::endl;
         matA = new int[PROBLEM_SIZE*PROBLEM_SIZE];
         matB = new int[PROBLEM_SIZE*PROBLEM_SIZE];
         matC = new int[PROBLEM_SIZE*PROBLEM_SIZE];
 
+        std::cout << "Filling matrices with random numbers" << std::endl;
         fill_random(matA, PROBLEM_SIZE, PROBLEM_SIZE);
         fill_random(matB, PROBLEM_SIZE, PROBLEM_SIZE);
     }else{
@@ -121,6 +118,8 @@ int main() {
     MPI_Barrier(MPI_COMM_WORLD);
 
     // ############ STEP #2 ############
+    if (rank == ROOT_NODE)
+        std::cout << "Distributing B matrix to all processes" << std::endl;
     // Broadcast matrix B to all processes
     MPI_Bcast(matB, PROBLEM_SIZE*PROBLEM_SIZE, MPI_INT, ROOT_NODE, MPI_COMM_WORLD);
 
@@ -130,6 +129,10 @@ int main() {
 
     // allocate memory for the partial A matrix received by each process
     int *partialMatA = new int[numOfRowsPerProcess*PROBLEM_SIZE];
+
+    if(rank == ROOT_NODE)
+        std::cout << "Distributing pieces of matrix A to all processes" << std::endl;
+
     MPI_Scatter(
             matA,                                               // the matrix to scatter
             numOfRowsPerProcess*PROBLEM_SIZE,          // how many element sent to each process
@@ -146,16 +149,15 @@ int main() {
     int *partialMatC = new int[numOfRowsPerProcess*PROBLEM_SIZE];
     std::cout << "rank " << rank << " got " << numOfRowsPerProcess << " rows of matrix A" << std::endl;
     std::cout << "rank " << rank << " got " << numOfRowsPerProcess*PROBLEM_SIZE << " elements of matrix A" << std::endl;
-    print_mat(partialMatA, numOfRowsPerProcess, PROBLEM_SIZE, "partialA");
-//    print_vector(partialMatA, PROBLEM_SIZE*numOfRowsPerProcess);
 
     // TODO: replace with call to CUDA matrix multiplication
     mat_mul_generic(partialMatA, matB, partialMatC, numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE);
 
-    std::cout << "rank " << rank << std::endl;
-    print_mat(partialMatC, numOfRowsPerProcess, PROBLEM_SIZE, "partialMatC");
-
+    std::cout << "rank " << rank << " finished calculating " << numOfRowsPerProcess << " rows of result matrix" << std::endl;
     MPI_Barrier(MPI_COMM_WORLD);
+
+    if(rank == ROOT_NODE)
+        std::cout << "All processes finished gathering results" << std::endl;
 
     // ############ STEP #5 ############
     // Gather rows of C from all processes and assemble them into the final C
@@ -173,28 +175,15 @@ int main() {
     // ############ STEP #6 ############
     // Verify the multiplication was successful by comparing with a serial implementation
     if(rank == ROOT_NODE){
-        std::cout << "Matrix A" << std::endl;
-//        print_vector(matA, PROBLEM_SIZE*PROBLEM_SIZE);
-        print_mat(matA, PROBLEM_SIZE, PROBLEM_SIZE, "matA");
-        std::cout << "Matrix B" << std::endl;
-//        print_vector(matB, PROBLEM_SIZE*PROBLEM_SIZE);
-        print_mat(matB, PROBLEM_SIZE, PROBLEM_SIZE, "matB");
-        std::cout << "Matrix C" << std::endl;
-//        print_vector(matC, PROBLEM_SIZE*PROBLEM_SIZE);
-        print_mat(matC, PROBLEM_SIZE, PROBLEM_SIZE, "matC");
-
         int *controlMatC = new int[PROBLEM_SIZE*PROBLEM_SIZE];
+
+        std::cout << "Verifying result.." << std::endl;
         mat_mul_generic(matA, matB, controlMatC, PROBLEM_SIZE, PROBLEM_SIZE, PROBLEM_SIZE);
 
         if(mat_comp(matC, controlMatC, PROBLEM_SIZE))
             std::cout << "Algorithm successful!" << std::endl;
-        else{
+        else
             std::cout << "Tough shit :(" << std::endl;
-            std::cout << "Expected Matrix C" << std::endl;
-            print_mat(controlMatC, PROBLEM_SIZE, PROBLEM_SIZE, "controlMat");
-
-        }
-
     }
 
     // Finalize the MPI environment.
