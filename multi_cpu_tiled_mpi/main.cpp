@@ -24,17 +24,18 @@ void fill_random(int* mat, const size_t rows, const size_t cols){
 void mat_mul_generic(
         const int* a,
         const int* b,
-        int* result,
-        const size_t aRows,
-        const size_t aCols,
-        const size_t bRows,
-        const size_t bCols
+        int* c,
+        const size_t n,
+        const size_t m,
+        const size_t p
     ){
-    for(int r = 0; r < aRows; ++r) {
-        for (int c = 0; c < bCols; ++c) {
-            for (int e = 0; e < aCols; e++){
-                result[r*bCols + c] += a[r*aCols + e] * b[e*bCols + c];
+    for(int i = 0; i < n; ++i) {
+        for (int j = 0; j < p; ++j) {
+            int sum = 0;
+            for (int k = 0; k < m; ++k){
+                sum += a[i*p + k] * b[k*i+j];
             }
+            c[i*p +j] = sum;
         }
     }
 }
@@ -149,7 +150,10 @@ int main() {
 //    print_vector(partialMatA, PROBLEM_SIZE*numOfRowsPerProcess);
 
     // TODO: replace with call to CUDA matrix multiplication
-    mat_mul_generic(partialMatA, matB, partialMatC, numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE, PROBLEM_SIZE);
+    mat_mul_generic(partialMatA, matB, partialMatC, numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE);
+
+    std::cout << "rank " << rank << std::endl;
+    print_mat(partialMatC, numOfRowsPerProcess, PROBLEM_SIZE, "partialMatC");
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -180,7 +184,7 @@ int main() {
         print_mat(matC, PROBLEM_SIZE, PROBLEM_SIZE, "matC");
 
         int *controlMatC = new int[PROBLEM_SIZE*PROBLEM_SIZE];
-        mat_mul_generic(matA, matB, controlMatC, PROBLEM_SIZE, PROBLEM_SIZE, PROBLEM_SIZE, PROBLEM_SIZE);
+        mat_mul_generic(matA, matB, controlMatC, PROBLEM_SIZE, PROBLEM_SIZE, PROBLEM_SIZE);
 
         if(mat_comp(matC, controlMatC, PROBLEM_SIZE))
             std::cout << "Algorithm successful!" << std::endl;
