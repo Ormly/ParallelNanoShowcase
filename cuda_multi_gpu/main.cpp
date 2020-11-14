@@ -93,8 +93,12 @@ int main(int argc, char *argv[])
     // pointers to the matrices
     int *matA, *matB, *matC;
     const unsigned int ROOT_NODE = 0;
+	
     auto start_time = std::chrono::high_resolution_clock::now();
     auto end_time = std::chrono::high_resolution_clock::now();
+	
+	auto start_time_mult = std::chrono::high_resolution_clock::now();
+	auto end_time_mult = std::chrono::high_resolution_clock::now();
 	 
 	 
 
@@ -103,7 +107,7 @@ int main(int argc, char *argv[])
    
 
     //root node metrics
-    std::chrono::duration<double, std::milli> verification_time, matB_broadcast, matA_gather, matA_scatter, total_exec_time; 
+    std::chrono::duration<double, std::milli> verification_time, matB_broadcast, matA_gather, matA_scatter, total_exec_time, mul_time; 
 
     // init MPI
     // Initialize the MPI environment
@@ -125,10 +129,11 @@ int main(int argc, char *argv[])
     // ############ STEP #1 ############
     //  initialize matrices A, B and C and fill A and B with random data
     // only performed by root node
-    if(rank == ROOT_NODE){
+    if(rank == ROOT_NODE)
+	{
         std::cout << "problem size: " << PROBLEM_SIZE << "X" << PROBLEM_SIZE << std::endl;
         std::cout << "World size: " << world_size << std::endl;
-		  std::cout << "CUDA Threads: " << CUDA_THREADS << std::endl;
+		 std::cout << "CUDA Threads: " << CUDA_THREADS << std::endl;
         matA = new int[PROBLEM_SIZE*PROBLEM_SIZE];
         matB = new int[PROBLEM_SIZE*PROBLEM_SIZE];
         matC = new int[PROBLEM_SIZE*PROBLEM_SIZE];
@@ -137,10 +142,12 @@ int main(int argc, char *argv[])
         std::cout << "Filling matrices with random numbers" << std::endl;
         fill_random(matA, PROBLEM_SIZE, PROBLEM_SIZE);
         fill_random(matB, PROBLEM_SIZE, PROBLEM_SIZE);
-    }else{
+    }
+	else
+	{
         // allocate memory for matB on all other nodes before broadcasting the matrix
         matB = new int[PROBLEM_SIZE*PROBLEM_SIZE];
-	cudaMalloc(&d_b, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int));
+		cudaMalloc(&d_b, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int));
     }
 
     // all processes have to wait until matrix initialization is finished
@@ -148,7 +155,8 @@ int main(int argc, char *argv[])
 
     // ############ STEP #2 ############
     if (rank == ROOT_NODE)
-    	std::cout << "Distributing B matrix to all processes" << std::endl;
+		start_time_mult = std::chrono::high_resolution_clock::now();
+    	//std::cout << "Distributing B matrix to all processes" << std::endl;
     // Broadcast matrix B to all processes
     if (rank == ROOT_NODE)
 		start_time = std::chrono::high_resolution_clock::now();
@@ -174,7 +182,7 @@ int main(int argc, char *argv[])
     cudaMalloc(&d_a, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int));
 
     if(rank == ROOT_NODE)
-        std::cout << "Distributing pieces of matrix A to all processes" << std::endl;
+        //std::cout << "Distributing pieces of matrix A to all processes" << std::endl;
     if(rank == ROOT_NODE)
     	start_time = std::chrono::high_resolution_clock::now();
     MPI_Scatter(
@@ -211,18 +219,17 @@ int main(int argc, char *argv[])
 
     // TODO: replace with call to CUDA matrix multiplication
     //mat_mul_generic(partialMatA, matB, partialMatC, numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE);
-    	start_time = std::chrono::high_resolution_clock::now();
-	  launchKernelCUDA(numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE, CUDA_THREADS, cudaBlocks, d_a, d_b, d_c);
+    	
+	launchKernelCUDA(numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE, CUDA_THREADS, cudaBlocks, d_a, d_b, d_c);
 
 
-	 end_time = std::chrono::high_resolution_clock::now();
-	 kernel_execution_time = end_time - start_time;
+	end_time = std::chrono::high_resolution_clock::now();
+	kernel_execution_time = end_time - start_time;
     
 
     cudaMemcpy(partialMatC, d_c, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int), cudaMemcpyDeviceToHost);
 
-
-    		
+		
     std::cout << "rank " << rank << " finished calculating " << numOfRowsPerProcess << " rows of result matrix" << std::endl;
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -250,15 +257,18 @@ int main(int argc, char *argv[])
 		matA_gather = end_time - start_time;
     }
     MPI_Barrier(MPI_COMM_WORLD);
+	
 
     // ############ STEP #6 ############
     // Verify the multiplication was successful by comparing with a serial implementation
     if(rank == ROOT_NODE)
     {
+		end_time_mult = std::chrono::high_resolution_clock::now();
         int *controlMatC = new int[PROBLEM_SIZE*PROBLEM_SIZE];
 
         std::cout << "Verifying result.." << std::endl;
         start_time = std::chrono::high_resolution_clock::now();
+		
         mat_mul_generic(matA, matB, controlMatC, PROBLEM_SIZE, PROBLEM_SIZE, PROBLEM_SIZE);
 
 	/*
@@ -272,11 +282,11 @@ int main(int argc, char *argv[])
 */
 	
         if(mat_comp(matC, controlMatC, PROBLEM_SIZE))
-		  {
-	     		end_time = std::chrono::high_resolution_clock::now();
+		{
+	     	end_time = std::chrono::high_resolution_clock::now();
             verification_time = end_time - start_time;
             std::cout << "Algorithm successful!\n" << std::endl;
-            
+            /*
             std::cout << "Result metrics:" << std::endl;
 	    	std::cout << "Verification duration: " << (verification_time/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;
             std::cout << "Matrix B broadcast duration: " << (matB_broadcast/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;
@@ -287,29 +297,39 @@ int main(int argc, char *argv[])
 			std::cerr << (matB_broadcast/std::chrono::milliseconds(1)) << std::endl;
 			std::cerr << (matA_scatter/std::chrono::milliseconds(1)) << std::endl;
 			std::cerr << (matA_gather/std::chrono::milliseconds(1)) << std::endl;
-		   }	
-        	else
-            std::cout << "Tough shit :(" << std::endl;
-      }
-      std::cout << "Node " << processor_name << " with rank: " << rank << " finished the kernel execution in "  
-      << kernel_execution_time/std::chrono::milliseconds(1) << " milliseconds" <<std::endl; 
-	  std::cerr << (kernel_execution_time/std::chrono::milliseconds(1)) << std::endl;
+			*/
+		}	
+		else
+		{
+			std::cout << "Tough shit :(" << std::endl;
+		}
+		
+    }
+      //std::cout << "Node " << processor_name << " with rank: " << rank << " finished the kernel execution in "  
+      //<< kernel_execution_time/std::chrono::milliseconds(1) << " milliseconds" <<std::endl; 
+	  
+	  //std::cerr << (kernel_execution_time/std::chrono::milliseconds(1)) << std::endl;
   
 	if(rank == ROOT_NODE)
 	{
 		auto end_time_total = std::chrono::high_resolution_clock::now();
 		total_exec_time = end_time_total - start_time_total;
-		std::cout << "Total Execution time: " << total_exec_time/std::chrono::milliseconds(1) << " milliseconds" << std::endl;
+		std::cout << "Program Execution time: " << total_exec_time/std::chrono::milliseconds(1) << " milliseconds" << std::endl;
 		std::cerr << (total_exec_time/std::chrono::milliseconds(1)) << std::endl;
+		
+		std::cout << "Multiplication execution time Execution time: " << mul_time/std::chrono::milliseconds(1) << milliseconds << std::endl;
+		std::cerr << (mul_time/std::chrono::milliseconds(1)) << std::endl;
 	}
 	
 	
 
     // Finalize the MPI environment.
-   MPI_Finalize();
+	MPI_Finalize();
 	cudaFree(d_a);
 	cudaFree(d_b);
 	cudaFree(d_c);
+	std::cerr << " " << std::endl;
+	
 
     return 0;
 }
