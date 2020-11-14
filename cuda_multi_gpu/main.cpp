@@ -278,22 +278,29 @@ int main(int argc, char *argv[])
             std::cout << "Algorithm successful!\n" << std::endl;
             
             std::cout << "Result metrics:" << std::endl;
-	    		std::cout << "Verification duration: " << (verification_time/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;
+	    	std::cout << "Verification duration: " << (verification_time/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;
             std::cout << "Matrix B broadcast duration: " << (matB_broadcast/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;
             std::cout << "Matrix A scatter duration: " << (matA_scatter/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;
-            std::cout << "Matrix A gather duration: " << (matA_gather/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;  
+            std::cout << "Matrix A gather duration: " << (matA_gather/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;
+
+			std::cerr << (verification_time/std::chrono::milliseconds(1)) << std::endl;
+			std::cerr << (matB_broadcast/std::chrono::milliseconds(1)) << std::endl;
+			std::cerr << (matA_scatter/std::chrono::milliseconds(1)) << std::endl;
+			std::cerr << (matA_gather/std::chrono::milliseconds(1)) << std::endl;
 		   }	
         	else
             std::cout << "Tough shit :(" << std::endl;
       }
       std::cout << "Node " << processor_name << " with rank: " << rank << " finished the kernel execution in "  
       << kernel_execution_time/std::chrono::milliseconds(1) << " milliseconds" <<std::endl; 
+	  std::cerr << (kernel_execution_time/std::chrono::milliseconds(1)) << std::endl;
   
 	if(rank == ROOT_NODE)
 	{
 		auto end_time_total = std::chrono::high_resolution_clock::now();
 		total_exec_time = end_time_total - start_time_total;
 		std::cout << "Total Execution time: " << total_exec_time/std::chrono::milliseconds(1) << " milliseconds" << std::endl;
+		std::cerr << (total_exec_time/std::chrono::milliseconds(1)) << std::endl;
 	}
 	
 	
