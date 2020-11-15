@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
     // ############ STEP #2 ############
     if (rank == ROOT_NODE)
 		start_time_mult = std::chrono::high_resolution_clock::now();
-    	//std::cout << "Distributing B matrix to all processes" << std::endl;
+    	
     // Broadcast matrix B to all processes
     if (rank == ROOT_NODE)
 		start_time = std::chrono::high_resolution_clock::now();
@@ -264,26 +264,26 @@ int main(int argc, char *argv[])
     if(rank == ROOT_NODE)
     {
 		end_time_mult = std::chrono::high_resolution_clock::now();
-        int *controlMatC = new int[PROBLEM_SIZE*PROBLEM_SIZE];
+      int *controlMatC = new int[PROBLEM_SIZE*PROBLEM_SIZE];
 
-        std::cout << "Verifying result.." << std::endl;
-        start_time = std::chrono::high_resolution_clock::now();
+      std::cout << "Verifying result.." << std::endl;
+      start_time = std::chrono::high_resolution_clock::now();
 		
-        mat_mul_generic(matA, matB, controlMatC, PROBLEM_SIZE, PROBLEM_SIZE, PROBLEM_SIZE);
-
-	/*
-	for(int r = 0; r < PROBLEM_SIZE; ++r) 
-	{
-        	for (int c = 0; c < PROBLEM_SIZE; ++c) 
+		
+      mat_mul_generic(matA, matB, controlMatC, PROBLEM_SIZE, PROBLEM_SIZE, PROBLEM_SIZE);
+		end_time = std::chrono::high_resolution_clock::now();
+	
+		for(int r = 0; r < PROBLEM_SIZE; ++r) 
 		{
-            		std::cout << matC[r*PROBLEM_SIZE + c] << "    " << controlMatC[r*PROBLEM_SIZE + c] << 	std::endl;
-        	}
-    	}
-*/
+			for (int c = 0; c < PROBLEM_SIZE; ++c) 
+			{	
+      		std::cout << matC[r*PROBLEM_SIZE + c] << "    " << controlMatC[r*PROBLEM_SIZE + c] << 	std::endl;
+      	}
+   	}
+
 	
         if(mat_comp(matC, controlMatC, PROBLEM_SIZE))
-		{
-	     	end_time = std::chrono::high_resolution_clock::now();
+			{
             verification_time = end_time - start_time;
             std::cout << "Algorithm successful!\n" << std::endl;
             /*
@@ -305,20 +305,20 @@ int main(int argc, char *argv[])
 		}
 		
     }
-      //std::cout << "Node " << processor_name << " with rank: " << rank << " finished the kernel execution in "  
-      //<< kernel_execution_time/std::chrono::milliseconds(1) << " milliseconds" <<std::endl; 
-	  
-	  //std::cerr << (kernel_execution_time/std::chrono::milliseconds(1)) << std::endl;
   
 	if(rank == ROOT_NODE)
 	{
 		auto end_time_total = std::chrono::high_resolution_clock::now();
+		mul_time = end_time_mult - start_time_mult;
 		total_exec_time = end_time_total - start_time_total;
 		std::cout << "Program Execution time: " << total_exec_time/std::chrono::milliseconds(1) << " milliseconds" << std::endl;
 		std::cerr << (total_exec_time/std::chrono::milliseconds(1)) << std::endl;
 		
-		std::cout << "Multiplication execution time Execution time: " << mul_time/std::chrono::milliseconds(1) << milliseconds << std::endl;
+		std::cout << "Multiplication execution time Execution time: " << mul_time/std::chrono::milliseconds(1) << "milliseconds" << std::endl;
 		std::cerr << (mul_time/std::chrono::milliseconds(1)) << std::endl;
+		std::cout << "serial multiplication duration: " << (verification_time/std::chrono::milliseconds(1)) << " milliseconds" << std::endl;
+		std::cerr << (verification_time/std::chrono::milliseconds(1)) << std::endl;
+		
 	}
 	
 	
