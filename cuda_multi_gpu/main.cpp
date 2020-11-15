@@ -3,8 +3,8 @@
 #include <mpi.h>
 #include "kernel.h"
 
-#define PROBLEM_SIZE    2048
-#define CUDA_THREADS 	32 
+#define PROBLEM_SIZE    1024
+#define CUDA_THREADS 	32
 
 /// Fill mat random integers
 /// \param mat
