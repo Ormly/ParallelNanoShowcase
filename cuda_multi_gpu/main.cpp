@@ -3,7 +3,7 @@
 #include <mpi.h>
 #include "kernel.h"
 
-#define PROBLEM_SIZE    1024
+#define PROBLEM_SIZE    4096
 #define CUDA_THREADS 	32
 
 /// Fill mat random integers
@@ -109,15 +109,14 @@ int main() {
         matA = new int[PROBLEM_SIZE*PROBLEM_SIZE];
         matB = new int[PROBLEM_SIZE*PROBLEM_SIZE];
         matC = new int[PROBLEM_SIZE*PROBLEM_SIZE];
-        cudaMalloc(&d_b, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int));
 
-        std::cout << "Filling matrices with random numbers" << std::endl;
+        std::cout << "Filling matrices with random numbers.." << std::endl;
         fill_random(matA, PROBLEM_SIZE, PROBLEM_SIZE);
         fill_random(matB, PROBLEM_SIZE, PROBLEM_SIZE);
+        std::cout << "Filling matrices with random numbers..done" << std::endl;
     }else{
         // allocate memory for matB on all other nodes before broadcasting the matrix
         matB = new int[PROBLEM_SIZE*PROBLEM_SIZE];
-	cudaMalloc(&d_b, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int));
     }
 
     // all processes have to wait until matrix initialization is finished
@@ -128,7 +127,6 @@ int main() {
         std::cout << "Distributing B matrix to all processes" << std::endl;
     // Broadcast matrix B to all processes
     MPI_Bcast(matB, PROBLEM_SIZE*PROBLEM_SIZE, MPI_INT, ROOT_NODE, MPI_COMM_WORLD);
-    cudaMemcpy(d_b, matB, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int), cudaMemcpyHostToDevice);
 
     // ############ STEP #3 ############
     //Scatter rows of A to all processes
@@ -136,9 +134,6 @@ int main() {
 
     // allocate memory for the partial A matrix received by each process
     int *partialMatA = new int[numOfRowsPerProcess*PROBLEM_SIZE];
-
-    //Allocate memory for partial matrix A on each GPU
-    cudaMalloc(&d_a, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int));
 
     if(rank == ROOT_NODE)
         std::cout << "Distributing pieces of matrix A to all processes" << std::endl;
@@ -154,24 +149,39 @@ int main() {
             MPI_COMM_WORLD                                      // communicator
             );
     MPI_Barrier(MPI_COMM_WORLD); 	
-    cudaMemcpy(d_a, partialMatA, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int), cudaMemcpyHostToDevice); 	
+
     // ############ STEP #4 ############
     // Each process calculates respective rows of C with their data
     int * partialMatC = new int[numOfRowsPerProcess*PROBLEM_SIZE];
     int cudaBlocks = PROBLEM_SIZE / CUDA_THREADS; 
-
-    //Allocate memory for partial matrix C on each GPU 
-    cudaMalloc(&d_c, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int));
-    cudaMemcpy(d_c, partialMatC, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int), cudaMemcpyHostToDevice);
  
+    std::cout << "rank:" << rank << " allocating GPU memory for matrices.." << std::endl;
+    // GPU mem allocations
+    
+    cudaMalloc(&d_a, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int));
+    cudaMalloc(&d_b, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int)); 
+    cudaMalloc(&d_c, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int));
+    //cudaHostAlloc(&d_a, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int), cudaHostAllocDefault);
+    //cudaHostAlloc(&d_b, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int), cudaHostAllocDefault);
+    //cudaHostAlloc(&d_c, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int), cudaHostAllocDefault);
+    std::cout << "rank:" << rank << " allocating memory for matrices.. done" << std::endl;
+
+    std::cout << "rank:" << rank << " copying matrices to GPU memory.." << std::endl;
+    // GPU mem copies 
+    cudaMemcpy(d_a, partialMatA, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_b, matB, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int), cudaMemcpyHostToDevice);
+    //cudaMemcpyAsync(d_a, partialMatA, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int), cudaMemcpyHostToDevice);
+    //cudaMemcpyAsync(d_b, matB, PROBLEM_SIZE * PROBLEM_SIZE * sizeof(int), cudaMemcpyHostToDevice);
+    
+    std::cout << "rank:" << rank << " copying matrices to GPU memory..done" << std::endl;
 
     std::cout << "rank " << rank << " got " << numOfRowsPerProcess << " rows of matrix A" << std::endl;
     std::cout << "rank " << rank << " got " << numOfRowsPerProcess*PROBLEM_SIZE << " elements of matrix A" << std::endl;
 
-    // TODO: replace with call to CUDA matrix multiplication
-    //mat_mul_generic(partialMatA, matB, partialMatC, numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE);
-launchKernelCUDA(numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE, CUDA_THREADS, cudaBlocks, d_a, d_b, d_c);
 
+    launchKernelCUDA(numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE, CUDA_THREADS, cudaBlocks, d_a, d_b, d_c);
+
+    // copy result back from GPU
     cudaMemcpy(partialMatC, d_c, numOfRowsPerProcess * PROBLEM_SIZE * sizeof(int), cudaMemcpyDeviceToHost);
 
     std::cout << "rank " << rank << " finished calculating " << numOfRowsPerProcess << " rows of result matrix" << std::endl;
@@ -221,11 +231,14 @@ launchKernelCUDA(numOfRowsPerProcess, PROBLEM_SIZE, PROBLEM_SIZE, CUDA_THREADS, 
 
 
 
-    // Finalize the MPI environment.
-    MPI_Finalize();
     cudaFree(d_a);
     cudaFree(d_b);
     cudaFree(d_c);
 
-    return 0;
+
+    // Finalize the MPI environment.
+    MPI_Finalize();
+    
+    
+	return 0;
 }
